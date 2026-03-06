@@ -1,47 +1,35 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\RabbitMq;
-
 use OldSound\RabbitMqBundle\RabbitMq\BaseConsumer;
-use PHPUnit\Framework\TestCase;
 
-class BaseConsumerTest extends TestCase
-{
-    /** @var BaseConsumer */
-    protected $consumer;
+beforeEach(function () {
+    $amqpConnection = $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
+        ->disableOriginalConstructor()
+        ->getMock();
 
-    protected function setUp(): void
-    {
-        $amqpConnection = $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
-            ->disableOriginalConstructor()
-            ->getMock();
+    $this->consumer = new class($amqpConnection) extends BaseConsumer {};
+});
 
-        $this->consumer = $this->getMockBuilder('\OldSound\RabbitMqBundle\RabbitMq\BaseConsumer')
-            ->setConstructorArgs([$amqpConnection])
-            ->getMockForAbstractClass();
-    }
+test('it extends BaseAmqp', function () {
+    expect($this->consumer)->toBeInstanceOf('OldSound\RabbitMqBundle\RabbitMq\BaseAmqp');
+});
 
-    public function testItExtendsBaseAmqpInterface()
-    {
-        $this->assertInstanceOf('OldSound\RabbitMqBundle\RabbitMq\BaseAmqp', $this->consumer);
-    }
+test('it implements DequeuerInterface', function () {
+    expect($this->consumer)->toBeInstanceOf('OldSound\RabbitMqBundle\RabbitMq\DequeuerInterface');
+});
 
-    public function testItImplementsDequeuerInterface()
-    {
-        $this->assertInstanceOf('OldSound\RabbitMqBundle\RabbitMq\DequeuerInterface', $this->consumer);
-    }
+test('idle timeout is mutable', function () {
+    expect($this->consumer->getIdleTimeout())->toBe(0);
 
-    public function testItsIdleTimeoutIsMutable()
-    {
-        $this->assertEquals(0, $this->consumer->getIdleTimeout());
-        $this->consumer->setIdleTimeout(42);
-        $this->assertEquals(42, $this->consumer->getIdleTimeout());
-    }
+    $this->consumer->setIdleTimeout(42);
 
-    public function testItsIdleTimeoutExitCodeIsMutable()
-    {
-        $this->assertEquals(0, $this->consumer->getIdleTimeoutExitCode());
-        $this->consumer->setIdleTimeoutExitCode(43);
-        $this->assertEquals(43, $this->consumer->getIdleTimeoutExitCode());
-    }
-}
+    expect($this->consumer->getIdleTimeout())->toBe(42);
+});
+
+test('idle timeout exit code is mutable', function () {
+    expect($this->consumer->getIdleTimeoutExitCode())->toBeNull();
+
+    $this->consumer->setIdleTimeoutExitCode(43);
+
+    expect($this->consumer->getIdleTimeoutExitCode())->toBe(43);
+});

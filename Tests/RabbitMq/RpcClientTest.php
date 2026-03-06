@@ -1,98 +1,81 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\RabbitMq;
-
-use InvalidArgumentException;
 use OldSound\RabbitMqBundle\RabbitMq\RpcClient;
 use PhpAmqpLib\Exception\AMQPTimeoutException;
 use PhpAmqpLib\Message\AMQPMessage;
-use PHPUnit\Framework\TestCase;
 
-class RpcClientTest extends TestCase
-{
-    public function testProcessMessageWithCustomUnserializer()
-    {
-        /** @var RpcClient $client */
-        $client = $this->getMockBuilder('\OldSound\RabbitMqBundle\RabbitMq\RpcClient')
-            ->setMethods(['sendReply', 'maybeStopConsumer'])
-            ->disableOriginalConstructor()
-            ->getMock();
-        /** @var AMQPMessage $message */
-        $message = $this->getMockBuilder('\PhpAmqpLib\Message\AMQPMessage')
-            ->setMethods(['get'])
-            ->setConstructorArgs(['message'])
-            ->getMock();
-        $serializer = $this->getMockBuilder('\Symfony\Component\Serializer\SerializerInterface')
-            ->setMethods(['serialize', 'deserialize'])
-            ->getMock();
-        $serializer->expects($this->once())->method('deserialize')->with('message', 'json', null);
-        $client->initClient(true);
-        $client->setUnserializer(function ($data) use ($serializer) {
-            $serializer->deserialize($data, 'json', '');
-        });
-        $client->processMessage($message);
-    }
+test('process message uses custom unserializer when set', function () {
+    // onlyMethods([]) keeps all real implementations so processMessage() runs actual code
+    $client = $this->getMockBuilder(RpcClient::class)
+        ->onlyMethods([])
+        ->disableOriginalConstructor()
+        ->getMock();
 
-    public function testProcessMessageWithNotifyMethod()
-    {
-        /** @var RpcClient $client */
-        $client = $this->getMockBuilder('\OldSound\RabbitMqBundle\RabbitMq\RpcClient')
-            ->setMethods(['sendReply', 'maybeStopConsumer'])
-            ->disableOriginalConstructor()
-            ->getMock();
-        $expectedNotify = 'message';
-        /** @var AMQPMessage $message */
-        $message = $this->getMockBuilder('\PhpAmqpLib\Message\AMQPMessage')
-            ->setMethods(['get'])
-            ->setConstructorArgs([$expectedNotify])
-            ->getMock();
-        $notified = false;
-        $client->notify(function ($message) use (&$notified) {
-            $notified = $message;
-        });
+    $message = $this->getMockBuilder(AMQPMessage::class)
+        ->onlyMethods(['get'])
+        ->setConstructorArgs(['message'])
+        ->getMock();
 
-        $client->initClient(false);
-        $client->processMessage($message);
+    $serializer = $this->getMockBuilder('\Symfony\Component\Serializer\SerializerInterface')->getMock();
+    $serializer->expects($this->once())->method('deserialize')->with('message', 'json', null);
 
-        $this->assertSame($expectedNotify, $notified);
-    }
+    $client->initClient(true);
+    $client->setUnserializer(function ($data) use ($serializer) {
+        $serializer->deserialize($data, 'json', '');
+    });
 
-    public function testInvalidParameterOnNotify()
-    {
-        /** @var RpcClient $client */
-        $client = $this->getMockBuilder('\OldSound\RabbitMqBundle\RabbitMq\RpcClient')
-            ->setMethods(['sendReply', 'maybeStopConsumer'])
-            ->disableOriginalConstructor()
-            ->getMock();
+    $client->processMessage($message);
+});
 
-        $this->expectException(InvalidArgumentException::class);
+test('process message calls notify callback with message body', function () {
+    // onlyMethods([]) keeps all real implementations so processMessage() and notify() run actual code
+    $client = $this->getMockBuilder(RpcClient::class)
+        ->onlyMethods([])
+        ->disableOriginalConstructor()
+        ->getMock();
 
-        $client->notify('not a callable');
-    }
+    $expectedBody = 'message';
 
-    public function testChannelCancelOnGetRepliesException()
-    {
-        $client = $this->getMockBuilder('\OldSound\RabbitMqBundle\RabbitMq\RpcClient')
-            ->setMethods(null)
-            ->disableOriginalConstructor()
-            ->getMock();
+    $message = $this->getMockBuilder(AMQPMessage::class)
+        ->onlyMethods(['get'])
+        ->setConstructorArgs([$expectedBody])
+        ->getMock();
 
-        $channel = $this->createMock('\PhpAmqpLib\Channel\AMQPChannel');
-        $channel->expects($this->any())
-            ->method('getChannelId')
-            ->willReturn('test');
-        $channel->expects($this->once())
-            ->method('wait')
-            ->willThrowException(new AMQPTimeoutException());
+    $notified = false;
+    $client->notify(function ($msg) use (&$notified) {
+        $notified = $msg;
+    });
 
-        $this->expectException(AMQPTimeoutException::class);
+    $client->initClient(false);
+    $client->processMessage($message);
 
-        $channel->expects($this->once())
-            ->method('basic_cancel');
+    expect($notified)->toBe($expectedBody);
+});
 
-        $client->setChannel($channel);
-        $client->addRequest('a', 'b', 'c');
+test('notify throws when given a non-callable', function () {
+    // onlyMethods([]) keeps all real implementations so notify() throws as expected
+    $client = $this->getMockBuilder(RpcClient::class)
+        ->onlyMethods([])
+        ->disableOriginalConstructor()
+        ->getMock();
 
-        $client->getReplies();
-    }
-}
+    expect(fn() => $client->notify('not a callable'))->toThrow(\InvalidArgumentException::class);
+});
+
+test('channel is cancelled when getReplies throws an exception', function () {
+    // onlyMethods([]) keeps all real implementations so getReplies() runs actual code
+    $client = $this->getMockBuilder(RpcClient::class)
+        ->onlyMethods([])
+        ->disableOriginalConstructor()
+        ->getMock();
+
+    $channel = $this->createMock('\PhpAmqpLib\Channel\AMQPChannel');
+    $channel->method('getChannelId')->willReturn('test');
+    $channel->expects($this->once())->method('wait')->willThrowException(new AMQPTimeoutException());
+    $channel->expects($this->once())->method('basic_cancel');
+
+    $client->setChannel($channel);
+    $client->addRequest('a', 'b', 'c');
+
+    expect(fn() => $client->getReplies())->toThrow(AMQPTimeoutException::class);
+});

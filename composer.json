@@ -21,9 +21,9 @@
     },
     "require-dev": {
         "symfony/serializer":           "^6.0 || ^7.0 || ^8.0",
-        "phpunit/phpunit":              "^9.5",
+        "pestphp/pest":                 "^3.0",
         "phpstan/phpstan":              "^1.2",
-        "phpstan/phpstan-phpunit":      "^1.0"
+        "phpstan/phpstan-phpunit":      "^1.4"
     },
     "replace": {
         "oldsound/rabbitmq-bundle": "self.version",
@@ -49,6 +49,11 @@
     "autoload-dev": {
         "psr-4": {
             "OldSound\\RabbitMqBundle\\Tests\\": "Tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
         }
     }
 }
