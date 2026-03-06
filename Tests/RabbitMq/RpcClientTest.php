@@ -59,7 +59,7 @@ test('notify throws when given a non-callable', function () {
         ->disableOriginalConstructor()
         ->getMock();
 
-    expect(fn() => $client->notify('not a callable'))->toThrow(\InvalidArgumentException::class);
+    expect(fn () => $client->notify('not a callable'))->toThrow(\InvalidArgumentException::class);
 });
 
 test('channel is cancelled when getReplies throws an exception', function () {
@@ -77,5 +77,5 @@ test('channel is cancelled when getReplies throws an exception', function () {
     $client->setChannel($channel);
     $client->addRequest('a', 'b', 'c');
 
-    expect(fn() => $client->getReplies())->toThrow(AMQPTimeoutException::class);
+    expect(fn () => $client->getReplies())->toThrow(AMQPTimeoutException::class);
 });
