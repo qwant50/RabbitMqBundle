@@ -20,7 +20,7 @@ test('process message uses custom serializer when set', function () {
     $message->setChannel($channel);
     $message->setDeliveryTag(0);
 
-    $server->setCallback(static fn() => 'message');
+    $server->setCallback(static fn () => 'message');
 
     $serializer = $this->getMockBuilder('\Symfony\Component\Serializer\SerializerInterface')->getMock();
     $serializer->expects($this->once())->method('serialize')->with('message', 'json');

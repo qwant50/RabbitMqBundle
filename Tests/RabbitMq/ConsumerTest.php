@@ -24,7 +24,7 @@ test('process message with various flags', function (string $consumerClass, mixe
     $amqpChannel    = $this->getMockBuilder(AMQPChannel::class)->disableOriginalConstructor()->getMock();
     $consumer       = new $consumerClass($amqpConnection, $amqpChannel);
 
-    $consumer->setCallback(static fn() => $processFlag);
+    $consumer->setCallback(static fn () => $processFlag);
 
     $amqpMessage = new AMQPMessage('foo body');
     $amqpMessage->setChannel($amqpChannel);
@@ -175,7 +175,7 @@ test('consumption continues after idle timeout when force stop is false', functi
 
     $consumer->setEventDispatcher($eventDispatcher);
 
-    expect(fn() => $consumer->consume(10))->toThrow(AMQPTimeoutException::class);
+    expect(fn () => $consumer->consume(10))->toThrow(AMQPTimeoutException::class);
 })->with('consumer_classes');
 
 test('graceful max execution will not wait if past timeout', function (string $consumerClass) {

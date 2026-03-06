@@ -22,7 +22,7 @@ dataset('multiple_consumer_process_flags', [
 ]);
 
 test('process queue message acks or rejects according to callback return value', function (mixed $processFlag, string $expectedMethod, ?bool $expectedRequeue) {
-    $callback = static fn() => $processFlag;
+    $callback = static fn () => $processFlag;
 
     $this->consumer->setQueues([
         'test-1' => ['callback' => $callback],
@@ -45,7 +45,7 @@ test('process queue message acks or rejects according to callback return value',
 })->with('multiple_consumer_process_flags');
 
 test('queues provider is used when set', function (mixed $processFlag, string $expectedMethod, ?bool $expectedRequeue) {
-    $callback = static fn() => $processFlag;
+    $callback = static fn () => $processFlag;
 
     $queuesProvider = $this->getMockBuilder('\OldSound\RabbitMqBundle\Provider\QueuesProviderInterface')->getMock();
     $queuesProvider->expects($this->once())
@@ -78,7 +78,7 @@ test('queues provider is used when set', function (mixed $processFlag, string $e
 })->with('multiple_consumer_process_flags');
 
 test('queues provider and static queues are merged together', function (mixed $processFlag, string $expectedMethod, ?bool $expectedRequeue) {
-    $callback = static fn() => $processFlag;
+    $callback = static fn () => $processFlag;
 
     $this->consumer->setQueues([
         'test-1' => ['callback' => $callback],

@@ -7,7 +7,7 @@ beforeEach(function () {
         ->disableOriginalConstructor()
         ->getMock();
 
-    $this->consumer = new class($amqpConnection) extends BaseConsumer {};
+    $this->consumer = new class ($amqpConnection) extends BaseConsumer {};
 });
 
 test('it extends BaseAmqp', function () {
