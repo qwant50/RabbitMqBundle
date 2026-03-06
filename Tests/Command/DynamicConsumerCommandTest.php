@@ -1,54 +1,48 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\Command;
-
 use OldSound\RabbitMqBundle\Command\DynamicConsumerCommand;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Helper\HelperSet;
+use Symfony\Component\Console\Input\InputDefinition;
 use Symfony\Component\Console\Input\InputOption;
 
-class DynamicConsumerCommandTest extends BaseCommandTest
-{
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->definition->expects($this->any())
-            ->method('getOptions')
-            ->will($this->returnValue([
-                new InputOption('--verbose', '-v', InputOption::VALUE_NONE, 'Increase verbosity of messages.'),
-                new InputOption('--env', '-e', InputOption::VALUE_REQUIRED, 'The Environment name.', 'dev'),
-                new InputOption('--no-debug', null, InputOption::VALUE_NONE, 'Switches off debug mode.'),
-            ]));
-        $this->application->expects($this->once())
-            ->method('getHelperSet')
-            ->will($this->returnValue($this->helperSet));
+beforeEach(function () {
+    $this->application = $this->getMockBuilder(Application::class)->disableOriginalConstructor()->getMock();
+    $this->definition  = $this->getMockBuilder(InputDefinition::class)->disableOriginalConstructor()->getMock();
+    $this->helperSet   = $this->getMockBuilder(HelperSet::class)->getMock();
 
-        $this->command = new DynamicConsumerCommand();
-        $this->command->setApplication($this->application);
-    }
+    $this->application->method('getDefinition')->willReturn($this->definition);
+    $this->definition->method('getArguments')->willReturn([]);
+    $this->definition->method('getOptions')->willReturn([
+        new InputOption('--verbose', '-v', InputOption::VALUE_NONE, 'Increase verbosity of messages.'),
+        new InputOption('--env', '-e', InputOption::VALUE_REQUIRED, 'The Environment name.', 'dev'),
+        new InputOption('--no-debug', null, InputOption::VALUE_NONE, 'Switches off debug mode.'),
+    ]);
 
-    /**
-     * testInputsDefinitionCommand
-     */
-    public function testInputsDefinitionCommand()
-    {
-        // check argument
-        $definition = $this->command->getDefinition();
-        $this->assertTrue($definition->hasArgument('name'));
-        $this->assertTrue($definition->getArgument('name')->isRequired()); // Name is required to find the service
+    $this->application->expects($this->once())->method('getHelperSet')->willReturn($this->helperSet);
 
-        $this->assertTrue($definition->hasArgument('context'));
-        $this->assertTrue($definition->getArgument('context')->isRequired()); // Context is required for the queue options provider
+    $this->command = new DynamicConsumerCommand();
+    $this->command->setApplication($this->application);
+});
 
-        //check options
-        $this->assertTrue($definition->hasOption('messages'));
-        $this->assertTrue($definition->getOption('messages')->isValueOptional()); // It should accept value
+test('dynamic consumer command has the correct input definition', function () {
+    $definition = $this->command->getDefinition();
 
-        $this->assertTrue($definition->hasOption('route'));
-        $this->assertTrue($definition->getOption('route')->isValueOptional()); // It should accept value
+    expect($definition->hasArgument('name'))->toBeTrue();
+    expect($definition->getArgument('name')->isRequired())->toBeTrue();
 
-        $this->assertTrue($definition->hasOption('without-signals'));
-        $this->assertFalse($definition->getOption('without-signals')->acceptValue()); // It shouldn't accept value because it is a true/false input
+    expect($definition->hasArgument('context'))->toBeTrue();
+    expect($definition->getArgument('context')->isRequired())->toBeTrue();
 
-        $this->assertTrue($definition->hasOption('debug'));
-        $this->assertFalse($definition->getOption('debug')->acceptValue()); // It shouldn't accept value because it is a true/false input
-    }
-}
+    expect($definition->hasOption('messages'))->toBeTrue();
+    expect($definition->getOption('messages')->isValueOptional())->toBeTrue();
+
+    expect($definition->hasOption('route'))->toBeTrue();
+    expect($definition->getOption('route')->isValueOptional())->toBeTrue();
+
+    expect($definition->hasOption('without-signals'))->toBeTrue();
+    expect($definition->getOption('without-signals')->acceptValue())->toBeFalse();
+
+    expect($definition->hasOption('debug'))->toBeTrue();
+    expect($definition->getOption('debug')->acceptValue())->toBeFalse();
+});

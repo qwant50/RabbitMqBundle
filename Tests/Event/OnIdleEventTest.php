@@ -1,55 +1,36 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\Event;
-
 use OldSound\RabbitMqBundle\Event\OnIdleEvent;
 use OldSound\RabbitMqBundle\RabbitMq\Consumer;
-use PHPUnit\Framework\TestCase;
 
-/**
- * Class OnIdleEventTest
- *
- * @package OldSound\RabbitMqBundle\Tests\Event
- */
-class OnIdleEventTest extends TestCase
-{
-    protected function getConsumer()
-    {
-        return new Consumer(
-            $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
-                ->disableOriginalConstructor()
-                ->getMock(),
-            $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
-                ->disableOriginalConstructor()
-                ->getMock()
-        );
-    }
+beforeEach(function () {
+    $this->consumer = new Consumer(
+        $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
+            ->disableOriginalConstructor()
+            ->getMock(),
+        $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
+            ->disableOriginalConstructor()
+            ->getMock()
+    );
+});
 
-    public function testShouldAllowGetConsumerSetInConstructor()
-    {
-        $consumer = $this->getConsumer();
-        $event = new OnIdleEvent($consumer);
+test('should allow get consumer set in constructor', function () {
+    $event = new OnIdleEvent($this->consumer);
 
-        $this->assertSame($consumer, $event->getConsumer());
-    }
+    expect($event->getConsumer())->toBe($this->consumer);
+});
 
-    public function testShouldSetForceStopToTrueInConstructor()
-    {
-        $consumer = $this->getConsumer();
-        $event = new OnIdleEvent($consumer);
+test('should set force stop to true in constructor', function () {
+    $event = new OnIdleEvent($this->consumer);
 
-        $this->assertTrue($event->isForceStop());
-    }
+    expect($event->isForceStop())->toBeTrue();
+});
 
-    public function testShouldReturnPreviouslySetForceStop()
-    {
-        $consumer = $this->getConsumer();
-        $event = new OnIdleEvent($consumer);
+test('should return previously set force stop value', function () {
+    $event = new OnIdleEvent($this->consumer);
 
-        //guard
-        $this->assertTrue($event->isForceStop());
+    expect($event->isForceStop())->toBeTrue();
 
-        $event->setForceStop(false);
-        $this->assertFalse($event->isForceStop());
-    }
-}
+    $event->setForceStop(false);
+    expect($event->isForceStop())->toBeFalse();
+});

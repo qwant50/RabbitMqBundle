@@ -1,89 +1,54 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\RabbitMq;
-
 use OldSound\RabbitMqBundle\RabbitMq\Binding;
-use PHPUnit\Framework\Assert;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
 
-class BindingTest extends TestCase
-{
-    protected function getBinding($amqpConnection, $amqpChannel)
-    {
-        return new Binding($amqpConnection, $amqpChannel);
-    }
+test('queue bind delegates to channel with correct arguments', function () {
+    $connection = $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
+        ->disableOriginalConstructor()
+        ->getMock();
 
-    /**
-     * @return MockObject
-     */
-    protected function prepareAMQPConnection()
-    {
-        return $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
-            ->disableOriginalConstructor()
-            ->getMock();
-    }
+    $channel = $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
+        ->disableOriginalConstructor()
+        ->getMock();
+    $channel->method('getChannelId')->willReturn('channel_id');
 
-    protected function prepareAMQPChannel($channelId = null)
-    {
-        $channelMock = $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
-            ->disableOriginalConstructor()
-            ->getMock();
+    $source      = 'example_source';
+    $destination = 'example_destination';
+    $key         = 'example_key';
 
-        $channelMock->expects($this->any())
-            ->method('getChannelId')
-            ->willReturn($channelId);
-        return $channelMock;
-    }
+    $channel->expects($this->once())
+        ->method('queue_bind')
+        ->with($destination, $source, $key, false, null);
 
-    public function testQueueBind()
-    {
-        $ch = $this->prepareAMQPChannel('channel_id');
-        $con = $this->prepareAMQPConnection();
+    $binding = new Binding($connection, $channel);
+    $binding->setExchange($source);
+    $binding->setDestination($destination);
+    $binding->setRoutingKey($key);
+    $binding->setupFabric();
+});
 
-        $source = 'example_source';
-        $destination = 'example_destination';
-        $key = 'example_key';
-        $ch->expects($this->once())
-            ->method('queue_bind')
-            ->will($this->returnCallback(function ($d, $s, $k, $n, $a) use ($destination, $source, $key) {
-                Assert::assertSame($destination, $d);
-                Assert::assertSame($source, $s);
-                Assert::assertSame($key, $k);
-                Assert::assertFalse($n);
-                Assert::assertNull($a);
-            }));
+test('exchange bind delegates to channel with correct arguments', function () {
+    $connection = $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
+        ->disableOriginalConstructor()
+        ->getMock();
 
-        $binding = $this->getBinding($con, $ch);
-        $binding->setExchange($source);
-        $binding->setDestination($destination);
-        $binding->setRoutingKey($key);
-        $binding->setupFabric();
-    }
+    $channel = $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
+        ->disableOriginalConstructor()
+        ->getMock();
+    $channel->method('getChannelId')->willReturn('channel_id');
 
-    public function testExhangeBind()
-    {
-        $ch = $this->prepareAMQPChannel('channel_id');
-        $con = $this->prepareAMQPConnection();
+    $source      = 'example_source';
+    $destination = 'example_destination';
+    $key         = 'example_key';
 
-        $source = 'example_source';
-        $destination = 'example_destination';
-        $key = 'example_key';
-        $ch->expects($this->once())
-            ->method('exchange_bind')
-            ->will($this->returnCallback(function ($d, $s, $k, $n, $a) use ($destination, $source, $key) {
-                Assert::assertSame($destination, $d);
-                Assert::assertSame($source, $s);
-                Assert::assertSame($key, $k);
-                Assert::assertFalse($n);
-                Assert::assertNull($a);
-            }));
+    $channel->expects($this->once())
+        ->method('exchange_bind')
+        ->with($destination, $source, $key, false, null);
 
-        $binding = $this->getBinding($con, $ch);
-        $binding->setExchange($source);
-        $binding->setDestination($destination);
-        $binding->setRoutingKey($key);
-        $binding->setDestinationIsExchange(true);
-        $binding->setupFabric();
-    }
-}
+    $binding = new Binding($connection, $channel);
+    $binding->setExchange($source);
+    $binding->setDestination($destination);
+    $binding->setRoutingKey($key);
+    $binding->setDestinationIsExchange(true);
+    $binding->setupFabric();
+});

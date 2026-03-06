@@ -1,69 +1,40 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\Manager;
-
 use OldSound\RabbitMqBundle\MemoryChecker\MemoryConsumptionChecker;
 use OldSound\RabbitMqBundle\MemoryChecker\NativeMemoryUsageProvider;
-use PHPUnit\Framework\TestCase;
 
-/**
- * Class MemoryManagerTest
- *
- * @package OldSound\RabbitMqBundle\Tests\Manager
- */
-class MemoryConsumptionCheckerTest extends TestCase
-{
-    public function testMemoryIsNotAlmostOverloaded()
-    {
-        $currentMemoryUsage = '7M';
-        $allowedConsumptionUntil = '2M';
-        $maxConsumptionAllowed = '10M';
+test('memory is not almost overloaded when usage is below threshold', function () {
+    $provider = $this->getMockBuilder(NativeMemoryUsageProvider::class)->getMock();
+    $provider->method('getMemoryUsage')->willReturn('7M');
 
-        $memoryUsageProvider = $this->getMockBuilder('OldSound\\RabbitMqBundle\\MemoryChecker\\NativeMemoryUsageProvider')->getMock();
-        $memoryUsageProvider->expects($this->any())->method('getMemoryUsage')->willReturn($currentMemoryUsage);
+    $checker = new MemoryConsumptionChecker($provider);
 
-        $memoryManager = new MemoryConsumptionChecker($memoryUsageProvider);
+    expect($checker->isRamAlmostOverloaded('10M', '2M'))->toBeFalse();
+});
 
-        $this->assertFalse($memoryManager->isRamAlmostOverloaded($maxConsumptionAllowed, $allowedConsumptionUntil));
-    }
+test('memory is almost overloaded when usage is within threshold', function () {
+    $provider = $this->getMockBuilder(NativeMemoryUsageProvider::class)->getMock();
+    $provider->method('getMemoryUsage')->willReturn('9M');
 
-    public function testMemoryIsAlmostOverloaded()
-    {
-        $currentMemoryUsage = '9M';
-        $allowedConsumptionUntil = '2M';
-        $maxConsumptionAllowed = '10M';
+    $checker = new MemoryConsumptionChecker($provider);
 
-        $memoryUsageProvider = $this->getMockBuilder('OldSound\\RabbitMqBundle\\MemoryChecker\\NativeMemoryUsageProvider')->getMock();
-        $memoryUsageProvider->expects($this->any())->method('getMemoryUsage')->willReturn($currentMemoryUsage);
+    expect($checker->isRamAlmostOverloaded('10M', '2M'))->toBeTrue();
+});
 
-        $memoryManager = new MemoryConsumptionChecker($memoryUsageProvider);
+test('memory is not almost overloaded without allowed buffer', function () {
+    $provider = $this->getMockBuilder(NativeMemoryUsageProvider::class)->getMock();
+    $provider->method('getMemoryUsage')->willReturn('7M');
 
-        $this->assertTrue($memoryManager->isRamAlmostOverloaded($maxConsumptionAllowed, $allowedConsumptionUntil));
-    }
+    $checker = new MemoryConsumptionChecker($provider);
 
-    public function testMemoryExactValueIsNotAlmostOverloaded()
-    {
-        $currentMemoryUsage = '7M';
-        $maxConsumptionAllowed = '10M';
+    expect($checker->isRamAlmostOverloaded('10M'))->toBeFalse();
+});
 
-        $memoryUsageProvider = $this->getMockBuilder('OldSound\\RabbitMqBundle\\MemoryChecker\\NativeMemoryUsageProvider')->getMock();
-        $memoryUsageProvider->expects($this->any())->method('getMemoryUsage')->willReturn($currentMemoryUsage);
+test('memory is almost overloaded when usage exceeds max without allowed buffer', function () {
+    $provider = $this->getMockBuilder(NativeMemoryUsageProvider::class)->getMock();
+    $provider->method('getMemoryUsage')->willReturn('11M');
 
-        $memoryManager = new MemoryConsumptionChecker($memoryUsageProvider);
+    $checker = new MemoryConsumptionChecker($provider);
 
-        $this->assertFalse($memoryManager->isRamAlmostOverloaded($maxConsumptionAllowed));
-    }
-
-    public function testMemoryExactValueIsAlmostOverloaded()
-    {
-        $currentMemoryUsage = '11M';
-        $maxConsumptionAllowed = '10M';
-
-        $memoryUsageProvider = $this->getMockBuilder('OldSound\\RabbitMqBundle\\MemoryChecker\\NativeMemoryUsageProvider')->getMock();
-        $memoryUsageProvider->expects($this->any())->method('getMemoryUsage')->willReturn($currentMemoryUsage);
-
-        $memoryManager = new MemoryConsumptionChecker($memoryUsageProvider);
-
-        $this->assertTrue($memoryManager->isRamAlmostOverloaded($maxConsumptionAllowed));
-    }
-}
+    expect($checker->isRamAlmostOverloaded('10M'))->toBeTrue();
+});

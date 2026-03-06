@@ -1,297 +1,160 @@
 <?php
 
-namespace OldSound\RabbitMqBundle\Tests\RabbitMq;
-
-use OldSound\RabbitMqBundle\Provider\QueuesProviderInterface;
 use OldSound\RabbitMqBundle\RabbitMq\ConsumerInterface;
 use OldSound\RabbitMqBundle\RabbitMq\MultipleConsumer;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
-use PHPUnit\Framework\Assert;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
 
-class MultipleConsumerTest extends TestCase
-{
-    /**
-     * Multiple consumer
-     *
-     * @var MultipleConsumer
-     */
-    private $multipleConsumer;
+beforeEach(function () {
+    $this->amqpConnection = $this->getMockBuilder(AMQPStreamConnection::class)->disableOriginalConstructor()->getMock();
+    $this->amqpChannel    = $this->getMockBuilder(AMQPChannel::class)->disableOriginalConstructor()->getMock();
+    $this->consumer       = new MultipleConsumer($this->amqpConnection, $this->amqpChannel);
+});
 
-    /**
-     * AMQP channel
-     *
-     * @var MockObject|AMQPChannel
-     */
-    private $amqpChannel;
+dataset('multiple_consumer_process_flags', [
+    'ack on null return'                        => [null,                              'basic_ack',    null],
+    'ack on true return'                        => [true,                              'basic_ack',    null],
+    'reject and requeue on false'               => [false,                             'basic_reject', true],
+    'ack on MSG_ACK'                            => [ConsumerInterface::MSG_ACK,        'basic_ack',    null],
+    'reject and requeue on MSG_REJECT_REQUEUE'  => [ConsumerInterface::MSG_REJECT_REQUEUE, 'basic_reject', true],
+    'reject and drop on MSG_REJECT'             => [ConsumerInterface::MSG_REJECT,     'basic_reject', false],
+]);
 
-    /**
-     * AMQP connection
-     *
-     * @var MockObject|AMQPStreamConnection
-     */
-    private $amqpConnection;
+test('process queue message acks or rejects according to callback return value', function (mixed $processFlag, string $expectedMethod, ?bool $expectedRequeue) {
+    $callback = static fn () => $processFlag;
 
-    /**
-     * Set up
-     *
-     * @return void
-     */
-    public function setUp(): void
-    {
-        $this->amqpConnection = $this->prepareAMQPConnection();
-        $this->amqpChannel = $this->prepareAMQPChannel();
-        $this->multipleConsumer = new MultipleConsumer($this->amqpConnection, $this->amqpChannel);
-    }
+    $this->consumer->setQueues([
+        'test-1' => ['callback' => $callback],
+        'test-2' => ['callback' => $callback],
+    ]);
 
-    /**
-     * Check if the message is requeued or not correctly.
-     *
-     * @dataProvider processMessageProvider
-     */
-    public function testProcessMessage($processFlag, $expectedMethod, $expectedRequeue = null)
-    {
-        $callback = $this->prepareCallback($processFlag);
+    $this->amqpChannel->method('basic_reject')
+        ->willReturnCallback(function ($tag, $requeue) use ($expectedMethod, $expectedRequeue) {
+            expect($expectedMethod)->toBe('basic_reject');
+            expect($requeue)->toBe($expectedRequeue);
+        });
 
-        $this->multipleConsumer->setQueues(
-            [
-                'test-1' => ['callback' => $callback],
-                'test-2' => ['callback' => $callback],
-            ]
-        );
+    $this->amqpChannel->method('basic_ack')
+        ->willReturnCallback(function () use ($expectedMethod) {
+            expect($expectedMethod)->toBe('basic_ack');
+        });
 
-        $this->prepareAMQPChannelExpectations($expectedMethod, $expectedRequeue);
+    $this->consumer->processQueueMessage('test-1', createMultipleConsumerTestMessage($this->amqpChannel));
+    $this->consumer->processQueueMessage('test-2', createMultipleConsumerTestMessage($this->amqpChannel));
+})->with('multiple_consumer_process_flags');
 
-        $this->multipleConsumer->processQueueMessage('test-1', $this->createMessage());
-        $this->multipleConsumer->processQueueMessage('test-2', $this->createMessage());
-    }
+test('queues provider is used when set', function (mixed $processFlag, string $expectedMethod, ?bool $expectedRequeue) {
+    $callback = static fn () => $processFlag;
 
-    /**
-     * Check queues provider works well
-     *
-     * @dataProvider processMessageProvider
-     */
-    public function testQueuesProvider($processFlag, $expectedMethod, $expectedRequeue = null)
-    {
-        $callback = $this->prepareCallback($processFlag);
-
-        $queuesProvider = $this->prepareQueuesProvider();
-        $queuesProvider->expects($this->once())
-            ->method('getQueues')
-            ->will($this->returnValue(
-                [
-                    'test-1' => ['callback' => $callback],
-                    'test-2' => ['callback' => $callback],
-                ]
-            ));
-
-        $this->multipleConsumer->setQueuesProvider($queuesProvider);
-
-        /**
-         * We don't test consume method, which merges queues by calling $this->setupConsumer();
-         * So we need to invoke it manually
-         */
-        $reflectionClass = new \ReflectionClass(get_class($this->multipleConsumer));
-        $reflectionMethod = $reflectionClass->getMethod('mergeQueues');
-        $reflectionMethod->setAccessible(true);
-        $reflectionMethod->invoke($this->multipleConsumer);
-
-        $this->prepareAMQPChannelExpectations($expectedMethod, $expectedRequeue);
-
-        $this->multipleConsumer->processQueueMessage('test-1', $this->createMessage());
-        $this->multipleConsumer->processQueueMessage('test-2', $this->createMessage());
-    }
-
-    /**
-     * Check queues provider works well with static queues together
-     *
-     * @dataProvider processMessageProvider
-     */
-    public function testQueuesProviderAndStaticQueuesTogether($processFlag, $expectedMethod, $expectedRequeue = null)
-    {
-        $callback = $this->prepareCallback($processFlag);
-
-        $this->multipleConsumer->setQueues(
-            [
-                'test-1' => ['callback' => $callback],
-                'test-2' => ['callback' => $callback],
-            ]
-        );
-
-        $queuesProvider = $this->prepareQueuesProvider();
-        $queuesProvider->expects($this->once())
-            ->method('getQueues')
-            ->will($this->returnValue(
-                [
-                    'test-3' => ['callback' => $callback],
-                    'test-4' => ['callback' => $callback],
-                ]
-            ));
-
-        $this->multipleConsumer->setQueuesProvider($queuesProvider);
-
-        /**
-         * We don't test consume method, which merges queues by calling $this->setupConsumer();
-         * So we need to invoke it manually
-         */
-        $reflectionClass = new \ReflectionClass(get_class($this->multipleConsumer));
-        $reflectionMethod = $reflectionClass->getMethod('mergeQueues');
-        $reflectionMethod->setAccessible(true);
-        $reflectionMethod->invoke($this->multipleConsumer);
-
-        $this->prepareAMQPChannelExpectations($expectedMethod, $expectedRequeue);
-
-        $this->multipleConsumer->processQueueMessage('test-1', $this->createMessage());
-        $this->multipleConsumer->processQueueMessage('test-2', $this->createMessage());
-        $this->multipleConsumer->processQueueMessage('test-3', $this->createMessage());
-        $this->multipleConsumer->processQueueMessage('test-4', $this->createMessage());
-    }
-
-    public function processMessageProvider()
-    {
-        return [
-            [null, 'basic_ack'], // Remove message from queue only if callback return not false
-            [true, 'basic_ack'], // Remove message from queue only if callback return not false
-            [false, 'basic_reject', true], // Reject and requeue message to RabbitMQ
-            [ConsumerInterface::MSG_ACK, 'basic_ack'], // Remove message from queue only if callback return not false
-            [ConsumerInterface::MSG_REJECT_REQUEUE, 'basic_reject', true], // Reject and requeue message to RabbitMQ
-            [ConsumerInterface::MSG_REJECT, 'basic_reject', false], // Reject and drop
-        ];
-    }
-
-    /**
-     * @dataProvider queueBindingRoutingKeyProvider
-     */
-    public function testShouldConsiderQueueArgumentsOnQueueDeclaration($routingKeysOption, $expectedRoutingKey)
-    {
-        $queueName = 'test-queue-name';
-        $exchangeName = 'test-exchange-name';
-        $expectedArgs = ['test-argument' => ['S', 'test-value']];
-
-        $this->amqpChannel->expects($this->any())
-            ->method('getChannelId')->willReturn(0);
-
-        $this->amqpChannel->expects($this->any())
-            ->method('queue_declare')
-            ->willReturn([$queueName, 5, 0]);
-
-
-        $this->multipleConsumer->setExchangeOptions([
-            'declare' => false,
-            'name' => $exchangeName,
-            'type' => 'topic', ]);
-
-        $this->multipleConsumer->setQueues([
-            $queueName => [
-                'passive' => true,
-                'durable' => true,
-                'exclusive' => true,
-                'auto_delete' => true,
-                'nowait' => true,
-                'arguments' => $expectedArgs,
-                'ticket' => null,
-                'routing_keys' => $routingKeysOption, ],
+    $queuesProvider = $this->getMockBuilder('\OldSound\RabbitMqBundle\Provider\QueuesProviderInterface')->getMock();
+    $queuesProvider->expects($this->once())
+        ->method('getQueues')
+        ->willReturn([
+            'test-1' => ['callback' => $callback],
+            'test-2' => ['callback' => $callback],
         ]);
 
-        $this->multipleConsumer->setRoutingKey('test-routing-key');
+    $this->consumer->setQueuesProvider($queuesProvider);
 
-        // we assert that arguments are passed to the bind method
-        $this->amqpChannel->expects($this->once())
-            ->method('queue_bind')
-            ->with($queueName, $exchangeName, $expectedRoutingKey, false, $expectedArgs);
+    $reflectionClass  = new \ReflectionClass(MultipleConsumer::class);
+    $reflectionMethod = $reflectionClass->getMethod('mergeQueues');
+    $reflectionMethod->setAccessible(true);
+    $reflectionMethod->invoke($this->consumer);
 
-        $this->multipleConsumer->setupFabric();
-    }
+    $this->amqpChannel->method('basic_reject')
+        ->willReturnCallback(function ($tag, $requeue) use ($expectedMethod, $expectedRequeue) {
+            expect($expectedMethod)->toBe('basic_reject');
+            expect($requeue)->toBe($expectedRequeue);
+        });
 
-    public function queueBindingRoutingKeyProvider()
-    {
-        return [
-            [[], 'test-routing-key'],
-            [['test-routing-key-2'], 'test-routing-key-2'],
-        ];
-    }
+    $this->amqpChannel->method('basic_ack')
+        ->willReturnCallback(function () use ($expectedMethod) {
+            expect($expectedMethod)->toBe('basic_ack');
+        });
 
-    /**
-     * Preparing AMQP Connection
-     *
-     * @return MockObject|AMQPStreamConnection
-     */
-    private function prepareAMQPConnection()
-    {
-        return $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPStreamConnection')
-            ->disableOriginalConstructor()
-            ->getMock();
-    }
+    $this->consumer->processQueueMessage('test-1', createMultipleConsumerTestMessage($this->amqpChannel));
+    $this->consumer->processQueueMessage('test-2', createMultipleConsumerTestMessage($this->amqpChannel));
+})->with('multiple_consumer_process_flags');
 
-    /**
-     * Preparing AMQP Connection
-     *
-     * @return MockObject|AMQPChannel
-     */
-    private function prepareAMQPChannel()
-    {
-        return $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
-            ->disableOriginalConstructor()
-            ->getMock();
-    }
+test('queues provider and static queues are merged together', function (mixed $processFlag, string $expectedMethod, ?bool $expectedRequeue) {
+    $callback = static fn () => $processFlag;
 
-    /**
-     * Preparing QueuesProviderInterface instance
-     *
-     * @return MockObject|QueuesProviderInterface
-     */
-    private function prepareQueuesProvider()
-    {
-        return $this->getMockBuilder('\OldSound\RabbitMqBundle\Provider\QueuesProviderInterface')
-            ->getMock();
-    }
+    $this->consumer->setQueues([
+        'test-1' => ['callback' => $callback],
+        'test-2' => ['callback' => $callback],
+    ]);
 
-    /**
-     * Preparing AMQP Channel Expectations
-     *
-     * @param mixed $expectedMethod
-     * @param string $expectedRequeue
-     *
-     * @return void
-     */
-    private function prepareAMQPChannelExpectations($expectedMethod, $expectedRequeue)
-    {
-        $this->amqpChannel->expects($this->any())
-            ->method('basic_reject')
-            ->will($this->returnCallback(function ($delivery_tag, $requeue) use ($expectedMethod, $expectedRequeue) {
-                Assert::assertSame($expectedMethod, 'basic_reject'); // Check if this function should be called.
-                Assert::assertSame($requeue, $expectedRequeue); // Check if the message should be requeued.
-            }));
+    $queuesProvider = $this->getMockBuilder('\OldSound\RabbitMqBundle\Provider\QueuesProviderInterface')->getMock();
+    $queuesProvider->expects($this->once())
+        ->method('getQueues')
+        ->willReturn([
+            'test-3' => ['callback' => $callback],
+            'test-4' => ['callback' => $callback],
+        ]);
 
-        $this->amqpChannel->expects($this->any())
-            ->method('basic_ack')
-            ->will($this->returnCallback(function ($delivery_tag) use ($expectedMethod) {
-                Assert::assertSame($expectedMethod, 'basic_ack'); // Check if this function should be called.
-            }));
-    }
+    $this->consumer->setQueuesProvider($queuesProvider);
 
-    /**
-     * Prepare callback
-     *
-     * @param bool $processFlag
-     * @return callable
-     */
-    private function prepareCallback($processFlag)
-    {
-        return function ($msg) use ($processFlag) {
-            return $processFlag;
-        };
-    }
+    $reflectionClass  = new \ReflectionClass(MultipleConsumer::class);
+    $reflectionMethod = $reflectionClass->getMethod('mergeQueues');
+    $reflectionMethod->setAccessible(true);
+    $reflectionMethod->invoke($this->consumer);
 
-    private function createMessage()
-    {
-        $amqpMessage = new AMQPMessage('foo body');
-        $amqpMessage->setChannel($this->amqpChannel);
-        $amqpMessage->setDeliveryTag(0);
+    $this->amqpChannel->method('basic_reject')
+        ->willReturnCallback(function ($tag, $requeue) use ($expectedMethod, $expectedRequeue) {
+            expect($expectedMethod)->toBe('basic_reject');
+            expect($requeue)->toBe($expectedRequeue);
+        });
 
-        return $amqpMessage;
-    }
+    $this->amqpChannel->method('basic_ack')
+        ->willReturnCallback(function () use ($expectedMethod) {
+            expect($expectedMethod)->toBe('basic_ack');
+        });
+
+    $this->consumer->processQueueMessage('test-1', createMultipleConsumerTestMessage($this->amqpChannel));
+    $this->consumer->processQueueMessage('test-2', createMultipleConsumerTestMessage($this->amqpChannel));
+    $this->consumer->processQueueMessage('test-3', createMultipleConsumerTestMessage($this->amqpChannel));
+    $this->consumer->processQueueMessage('test-4', createMultipleConsumerTestMessage($this->amqpChannel));
+})->with('multiple_consumer_process_flags');
+
+test('queue declaration passes queue arguments to bind', function (array $routingKeysOption, string $expectedRoutingKey) {
+    $queueName    = 'test-queue-name';
+    $exchangeName = 'test-exchange-name';
+    $expectedArgs = ['test-argument' => ['S', 'test-value']];
+
+    $this->amqpChannel->method('getChannelId')->willReturn(0);
+    $this->amqpChannel->method('queue_declare')->willReturn([$queueName, 5, 0]);
+
+    $this->consumer->setExchangeOptions(['declare' => false, 'name' => $exchangeName, 'type' => 'topic']);
+    $this->consumer->setQueues([
+        $queueName => [
+            'passive'      => true,
+            'durable'      => true,
+            'exclusive'    => true,
+            'auto_delete'  => true,
+            'nowait'       => true,
+            'arguments'    => $expectedArgs,
+            'ticket'       => null,
+            'routing_keys' => $routingKeysOption,
+        ],
+    ]);
+    $this->consumer->setRoutingKey('test-routing-key');
+
+    $this->amqpChannel->expects($this->once())
+        ->method('queue_bind')
+        ->with($queueName, $exchangeName, $expectedRoutingKey, false, $expectedArgs);
+
+    $this->consumer->setupFabric();
+})->with([
+    'uses consumer routing key when queue has none' => [[], 'test-routing-key'],
+    'uses queue-specific routing key'               => [['test-routing-key-2'], 'test-routing-key-2'],
+]);
+
+function createMultipleConsumerTestMessage(mixed $channel): AMQPMessage
+{
+    $message = new AMQPMessage('foo body');
+    $message->setChannel($channel);
+    $message->setDeliveryTag(0);
+
+    return $message;
 }
