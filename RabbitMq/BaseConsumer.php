@@ -208,6 +208,9 @@ abstract class BaseConsumer extends BaseAmqp implements DequeuerInterface
         }
 
         if (!is_null($this->getMemoryLimit()) && $this->isRamAlmostOverloaded()) {
+            // Also raise the force-stop flag so the consume() loop exits instead
+            // of entering a wait() that can block forever on a cancelled consumer.
+            $this->forceStopConsumer();
             $this->stopConsuming();
         }
     }

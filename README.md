@@ -725,7 +725,13 @@ First we have to start the server from the command line:
 $ ./app/console_dev rabbitmq:rpc-server random_int
 ```
 
-The RPC server is a long-running consumer process, so it accepts the same options as `rabbitmq:consumer`: `--messages|-m` to stop after a number of requests, `--memory-limit|-l` to establish a memory limit in MB (the server stops gracefully five MB before reaching it, so a supervisor can restart it — useful against memory leaks), and `--without-signals|-w` to disable the graceful handling of SIGTERM/SIGINT/SIGQUIT. The `idle_timeout`, `timeout_wait` and `graceful_max_execution` options shown above behave exactly as they do for consumers.
+The RPC server is a long-running consumer process, so `rabbitmq:rpc-server` accepts the same options as `rabbitmq:consumer`:
+
+- `--messages|-m` stops the server after the given number of requests;
+- `--memory-limit|-l` sets a memory limit in MB — the server stops gracefully five MB before reaching it, so a supervisor can restart it (useful against slow memory leaks);
+- `--without-signals|-w` disables the graceful handling of SIGTERM/SIGINT/SIGQUIT.
+
+The `idle_timeout`, `timeout_wait` and `graceful_max_execution` options shown above behave exactly as they do for consumers.
 
 ```bash
 $ ./app/console_dev rabbitmq:rpc-server random_int -l 256
