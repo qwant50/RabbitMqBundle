@@ -707,6 +707,12 @@ rpc_servers:
         exchange_options: {name: random_int, type: topic}
         queue_options: {name: random_int_queue, durable: false, auto_delete: true}
         serializer: json_encode
+        idle_timeout: 60 #default: ~
+        idle_timeout_exit_code: 0 #default: ~
+        timeout_wait: 10 #default: ~
+        graceful_max_execution:
+            timeout: 1800 #default: ~
+            exit_code: 10 #default: 0
 ```
 
 *For a full configuration reference please use the `php app/console config:dump-reference old_sound_rabbit_mq` command.*
@@ -717,6 +723,12 @@ First we have to start the server from the command line:
 
 ```bash
 $ ./app/console_dev rabbitmq:rpc-server random_int
+```
+
+The RPC server is a long-running consumer process, so it accepts the same options as `rabbitmq:consumer`: `--messages|-m` to stop after a number of requests, `--memory-limit|-l` to establish a memory limit in MB (the server stops gracefully five MB before reaching it, so a supervisor can restart it — useful against memory leaks), and `--without-signals|-w` to disable the graceful handling of SIGTERM/SIGINT/SIGQUIT. The `idle_timeout`, `timeout_wait` and `graceful_max_execution` options shown above behave exactly as they do for consumers.
+
+```bash
+$ ./app/console_dev rabbitmq:rpc-server random_int -l 256
 ```
 
 And then add the following code to our controller:
