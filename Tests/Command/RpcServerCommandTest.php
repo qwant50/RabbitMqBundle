@@ -34,6 +34,7 @@ test('rpc server command has the correct input definition', function () {
 
     expect($definition->hasArgument('name'))->toBeTrue();
     expect($definition->getArgument('name')->isRequired())->toBeTrue();
+    expect($definition->getArgument('name')->getDescription())->toBe('Server Name');
 
     expect($definition->hasOption('messages'))->toBeTrue();
     expect($definition->getOption('messages')->isValueOptional())->toBeTrue();

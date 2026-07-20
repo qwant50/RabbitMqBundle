@@ -2,6 +2,8 @@
 
 namespace OldSound\RabbitMqBundle\Command;
 
+use Symfony\Component\Console\Input\InputArgument;
+
 class RpcServerCommand extends BaseConsumerCommand
 {
     protected function configure(): void
@@ -12,6 +14,12 @@ class RpcServerCommand extends BaseConsumerCommand
             ->setName('rabbitmq:rpc-server')
             ->setDescription('Start an RPC server')
         ;
+
+        // Restore an RPC-specific description for the "name" argument, inherited
+        // from BaseConsumerCommand as "Consumer Name".
+        $this->getDefinition()->setArguments([
+            new InputArgument('name', InputArgument::REQUIRED, 'Server Name'),
+        ]);
     }
 
     protected function getConsumerService()
